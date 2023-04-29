@@ -102,4 +102,152 @@ From orders
 Inner JOIN accounts on orders.account_id=accounts.id
 Where primary_poc='Jodee Lupo'
 
--- 
+-- Find total sale by each POC and grade them excellent if their total_amt>Avg of total_amt, else poor
+Select Sum(total_amt_usd), primary_poc, round(AVG(total_amt_usd),2),
+Case
+    When Sum(total_amt_usd)>
+    (
+        Select AVG(total_amt_usdd)
+        FROM (
+            Select primary_poc, Sum(total_amt_usd) as total_amt_usdd
+            From orders
+            Inner JOIN accounts on orders.account_id=accounts.id
+            group by primary_poc
+        ) as Total_Sum
+    )
+    then "Excelent"
+    Else "POOR" 
+    END as Avg_Performance
+From orders
+Inner JOIN accounts on orders.account_id=accounts.id
+GROUP BY primary_poc;
+
+--Provide a table for all web_events associated with account name of Walmart. There should be three columns. 
+--Be sure to include the primary_poc, time of the event, and the channel for each event. Additionally, you might choose 
+--to add a fourth column to assure only Walmart events were chosen.
+Select acc.name,acc.primary_poc,wb.channel,Date(wb.occurred_at)
+From accounts as acc
+Inner Join web_events as wb ON acc.id=wb.account_id
+Where name ="Walmart"
+
+--Provide a table that provides the region for each sales_rep along with their associated accounts. 
+--Your final table should include three columns: the region name, the sales rep name, and the account 
+--name. Sort the accounts alphabetically (A-Z) according to account name.
+Select acc.name as Account_name,
+    sr.name as Sales_Rep_name,
+    rg.name as Region_name
+From accounts as acc
+    Inner Join sales_reps as sr 
+        on acc.sales_rep_id = sr.id
+    Inner Join region as rg 
+        on sr.region_id = rg.id
+Order BY acc.name
+
+--Provide the name for each region for every order, as well as the account name and the unit price 
+--they paid (total_amt_usd/total) for the order. Your final table should have 3 columns: region name, 
+--account name, and unit price. A few accounts have 0 for total, so I divided by (total + 0.01) to 
+--assure not dividing by zero.
+Select rg.name as Region_name, 
+    acc.name as Account_name, 
+    round((o.total_amt_usd/(o.total+0.01)),2) as Unit_price
+From accounts as acc
+ Inner join orders as o 
+   on acc.id=o.account_id
+ Inner join sales_reps as sr
+   on acc.sales_rep_id=sr.id
+ Inner Join region as rg
+   on sr.region_id=rg.id
+
+--Provide a table that provides the region for each sales_rep along with their associated accounts. 
+--This time only for the Midwest region. Your final table should include three columns: the region name, 
+--the sales rep name, and the account name. Sort the accounts alphabetically (A-Z) according to account name.
+Select rg.name as Region,
+       sr.name as Sales_Rep_name,
+       acc.name as Account
+From accounts as acc
+Inner Join sales_reps as sr
+      on acc.sales_rep_id=sr.id
+Inner join region as rg
+      on sr.region_id=rg.id
+      AND rg.name ="Midwest"
+Order by acc.name;                     
+
+-- Q-> Provide a table that provides the region for each sales_rep along with their associated accounts. 
+--This time only for accounts where the sales rep has a first name starting with S and in the Midwest 
+--region. Your final table should include three columns: the region name, the sales rep name, and the 
+--account name. Sort the accounts alphabetically (A-Z) according to account name.
+Select rg.name as Region,
+       sr.name as Sales_Rep_name,
+       acc.name as Account
+From accounts as acc
+Inner Join sales_reps as sr
+      on acc.sales_rep_id=sr.id
+Inner join region as rg
+      on sr.region_id=rg.id
+      AND rg.name ="Midwest" AND sr.name Like "S%"
+ORDER BY acc.name;
+
+-- Q-> Provide the name for each region for every order, as well as the account name and the unit price 
+--they paid (total_amt_usd/total) for the order. However, you should only provide the results if the 
+--standard order quantity exceeds 100. Your final table should have 3 columns: region name, account name, 
+--and unit price. In order to avoid a division by zero error, adding .01 to the denominator here is 
+--helpful total_amt_usd/(total+0.01).
+Select rg.name as Region,
+       acc.name as Account,
+       round((o.total_amt_usd/(total+0.01)),2) as Unit_price,
+       o.standard_qty as Standard_QT
+From accounts as acc
+inner join orders as o
+      on acc.id=o.account_id
+Inner Join sales_reps as sr
+      on acc.sales_rep_id=sr.id
+Inner join region as rg
+      on sr.region_id=rg.id
+Where o.standard_qty>100                      
+
+-- Q-> Provide the name for each region for every order, as well as the account name and the unit price they paid 
+--(total_amt_usd/total) for the order. However, you should only provide the results if the standard order quantity 
+--exceeds 100 and the poster order quantity exceeds 50. Your final table should have 3 columns: region name, account name, 
+--and unit price. Sort for the smallest unit price first.
+Select rg.name as Region,
+       acc.name as Account,
+       round((o.total_amt_usd/(total+0.01)),2) as Unit_price,
+       o.standard_qty as Standard_QT
+From accounts as acc
+inner join orders as o
+      on acc.id=o.account_id
+Inner Join sales_reps as sr
+      on acc.sales_rep_id=sr.id
+Inner join region as rg
+      on sr.region_id=rg.id
+Where o.standard_qty>100 AND o.poster_qty>50
+Order by Unit_price ASC;
+
+-- Q-> What are the different channels used by account id 1001? Your final table should have only 2 columns: 
+--account name and the different channels.
+Select Distinct acc.name as Account,
+                web.channel as channel,
+                acc.id as Account_ID
+From accounts as acc
+Inner Join web_events as web
+      on  acc.id=web.account_id
+      AND acc.id=1001 
+
+--Find all the orders that occurred in 2015. Your final table should have 4 columns: 
+--occurred_at, account name, order total, and order total_amt_usd.     
+
+Select Year(web.occurred_at) as Years,
+       acc.name as Account,
+       o.total as Total_Orders,
+       o.total_amt_usd as Total_Amt_Earned,
+       o.id as Order_ID
+From accounts as acc
+Inner join orders as o
+      on acc.id=o.account_id
+Inner join web_events as web
+      on acc.id=web.account_id
+      AND Year(web.occurred_at)=2015
+Limit 50;
+
+                 
+
