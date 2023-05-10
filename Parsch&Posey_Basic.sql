@@ -536,6 +536,7 @@ group by Years;
 
 --Provide the name of the sales_rep in each region with the largest amount of total_amt_usd sales.
 --** Break a Subquery Problem into two or more parts, Achieve each part using a query and then Join those queries together
+--Solution 1
 
 Select t3.Top_rep_name,
       t3.Region_name,
@@ -572,7 +573,29 @@ From (
       ) as t3 on t3.Region_name = t2.Region_name
       AND t3.Total_Sales = t2.Max_Sales -- Joined the two tables (t2 &t3) on total sales 
       --of region with the Max Sales from that Region
+-- SOulution 2
 
+Select Max(Total_sales) as Max_Sales,
+      Region_name,
+      Sales_Rep_name
+From (
+            Select reg.name as Region_name,
+                  Sum(o.total_amt_usd) as Total_Sales,
+                  Sr.name as Sales_Rep_name
+            From accounts as acc
+                  Inner Join orders as o on o.account_id = acc.id
+                  Inner Join sales_reps as sr on acc.sales_rep_id = sr.id
+                  Inner join region as reg on reg.id = sr.region_id
+            Group by Region_name,
+                  Sales_Rep_name
+            Order By Total_Sales DESC
+      ) as t1
+Group by Region_name
+
+-- Thought Process - 1) In the inner query we find the sum of all regions and sales_rep (grouped) and then arranged in 
+-- descending order due to which only the Sales person with Max Sales contribution of that region becomes the first element
+-- For each region and is retrieved by the select statement, As the Group by always retrieves the first element of all the 
+-- non aggregated columns and all other columns apart from the grouped column (i.e Sales_Rep_name)
 
 
 -- Q --> For the region with the largest sales total_amt_usd, how many total orders were placed?
@@ -629,13 +652,330 @@ Having Count(o.id) > (
                   ) as t1
       ) as t2
 Inner join orders as o on o.account_id=t2.Account_ID
-) 
--- thought Process 
--- 1) We take out the sum of all standard qty and Account id then use sorting and Limit 1 to get the Largest standard qty 
+)  
+-- Thought Process 
+-- 1) We take out the sum of all standard qty and Account id then use sorting and Limit 1 to get the max of sum of standard qty 
 -- and its Accountid
 -- 2) We use this Account Id to Join this Sub-table to the original Orders table to get all the orders matching the Above 
 --  Accountid
--- 3) Count the number of row of this sub-query and then use Having to check the count of orders againt all the other accounts
+-- 3) Count the number of row of this sub-query and then use Having to check this count against the count of orders for all 
+-- the other accounts
 -- 4) Selecting the Accountname and order count grouped by Accountname to get the final result
 
 
+-- Q--> For the customer that spent the most (in total over their lifetime as a customer) total_amt_usd, how many web_events 
+-- did they have for each channel?
+
+Select Count(*) as Web_Count,
+      channel, acc.name as Account
+From web_events as web
+Inner Join accounts as acc on acc.id=web.account_id
+Where web.account_id = (
+            SELEct Account_ID
+            FROM (
+                        Select Sum(o.total_amt_usd) as Total_Sales,
+                              o.account_id as Account_ID
+                        From orders as o
+                        Group by account_id
+                        Order by Total_Sales DESC
+                        Limit 1
+                  ) as t1
+      )
+Group by channel
+
+-- Thought Process - 1) Firstly we find the AccountID with the highed total_amt in lifetime
+-- 2) We pass it thorugh the Where clause and Filter our Web_event table
+-- 3) We Select the required output columns and then group it by channel
+
+
+-- Q--> What is the lifetime average amount spent in terms of total_amt_usd for the top 10 total 
+-- spending accounts?
+
+Select AVG(Total_Sales) as Top_10_Avg
+From (
+            Select Sum(total_amt_usd) as Total_Sales,
+                  account_id as Account_ID
+            From orders as o
+            Group by Account_ID
+            Order by Total_Sales DESC
+            Limit 10
+      ) as t1
+-- Thought Process - 1) Take out the top 10 spending accounts and then pass it through the From clause as a table
+
+
+-- Q--> What is the lifetime average amount spent in terms of total_amt_usd, including only the companies 
+-- that spent more per order, on average, than the average of all orders.
+
+Select Avg(Avg_Sales) as Avg_Sales
+From (
+            Select Avg(total_amt_usd) as Avg_sales,
+                  account_id
+            From orders as o
+            Group by account_id
+            Having Avg_Sales > (
+                        Select Avg(total_amt_usd) as Avg_Sales
+                        From orders as o
+                  )
+      ) as t1
+
+-- Thought Process - 1) We take out the avg sales of all accounts.
+-- 2) Then we use this to filter in the having clause all the accounts having avg more than the total avg
+-- 3) Then we use this subquery as a table and then yield the outpur of the Avg of these accounts.
+
+
+--Q--> Provide the name of the sales_rep in each region with the largest amount of total_amt_usd sales.(Using With)
+With t1 as( 
+      Select reg.name as Region_name,
+                  Sum(o.total_amt_usd) as Total_Sales,
+                  Sr.name as Sales_Rep_name
+            From accounts as acc
+                  Inner Join orders as o on o.account_id = acc.id
+                  Inner Join sales_reps as sr on acc.sales_rep_id = sr.id
+                  Inner join region as reg on reg.id = sr.region_id
+            Group by Region_name,
+                  Sales_Rep_name
+            Order By Total_Sales DESC
+            )
+
+ 
+Select Max(Total_sales) as Max_Sales,
+      Region_name,
+      Sales_Rep_name
+From t1
+Group by Region_name
+
+-- Solution 2
+
+SELECT Region_name, Top_sales_rep, row_num, sum_total
+FROM (
+    SELECT 
+        Region_name, 
+        Top_sales_rep, 
+        sum_total,
+        ROW_NUMBER() OVER (PARTITION BY Region_name ORDER BY sum_total DESC) AS row_num
+    FROM (
+        SELECT 
+            reg.name AS Region_name, 
+            sr.name AS Top_sales_rep, 
+            SUM(total_amt_usd) AS sum_total
+        FROM accounts AS acc
+        INNER JOIN orders AS o ON o.account_id = acc.id
+        INNER JOIN sales_reps AS sr ON acc.sales_rep_id = sr.id
+        INNER JOIN region AS reg ON reg.id = sr.region_id
+        GROUP BY Region_name, Top_sales_rep
+        Order by sum_total Desc
+    ) t1
+) t2
+WHERE row_num = 1;
+
+
+
+
+--Use the accounts table and a CASE statement to create two groups: one group of company names that start with 
+--a number and a second group of those company names that start with a letter. What proportion of company names 
+--start with a letter?
+Select Sum(num) as numbers,
+      Sum(letter) as letter
+From (
+            Select name,
+                  CASE
+                        WHEN LEFT(Upper(name), 1) REGEXP '[0-9]' THEN 1
+                        Else 0
+                  End as num,
+                  CASE
+                        WHEN LEFT(upper(name), 1) REGEXP '[0-9]' THEN 0
+                        Else 1
+                  End as letter
+            From accounts
+      ) as t1
+
+-- Q--> Consider vowels as a, e, i, o, and u. What proportion of company names start with a vowel, and what 
+-- percent start with anything else?
+Select sum(vowels) as vowels,
+      sum(cons) as consonants,
+      (sum(cons) /(sum(cons) + sum(vowels))) * 100 as consonants_percent
+From(
+            Select name,
+                  Case
+                        WHEN Left(Upper(name), 1) IN ('A', 'E', 'I', 'O', 'U') Then 1
+                        Else 0
+                  END as vowels,
+                  Case
+                        WHEN Left(upper(name), 1) IN ('A', 'E', 'I', 'O', 'U') Then 0
+                        Else 1
+                  END as cons
+            From accounts
+      ) as t1
+
+-- Q--> Use the accounts table to create first and last name columns that hold the first and last names for the 
+-- primary_poc.
+Select primary_poc, 
+      Left(primary_poc, LOCate(" ", primary_poc)-1) as First_name,
+      Right(
+            primary_poc,
+            length(primary_poc) - locate(" ", primary_poc)
+      ) as last_name
+from accounts
+
+-- Q--> Each company in the accounts table wants to create an email address for each primary_poc. The email 
+-- address should be the first name of the primary_poc . last name primary_poc @ company name .com.
+Select Concat(First_name, ".", last_name, "@", company, ".com")
+From (
+            Select Left(primary_poc, Locate(" ", primary_poc) -1) as First_name,
+                  Right(
+                        primary_poc,
+                        length(primary_poc) - locate(" ", primary_poc)
+                  ) as last_name,
+                  name as company
+            From accounts
+      ) as t1
+
+-- Solution 2
+With Full_name as (
+      Select Substring_Index(primary_poc, " ", 1) as First_name,
+            Substring_index(primary_poc, " ", -1) as last_name,
+            Replace(name," ","") as Company
+      From accounts
+)
+Select Concat(First_name, ".", last_name, "@", company, ".com") as Email
+From Full_name
+
+
+-- Q--> We would also like to create an initial password, which they will change after their first log in. 
+-- The first password will be the first letter of the primary_poc's first name (lowercase), then the last letter 
+-- of their first name (lowercase), the first letter of their last name (lowercase), the last letter of their last 
+-- name (lowercase), the number of letters in their first name, the number of letters in their last name, and then 
+-- the name of the company they are working with, all capitalized with no spaces.
+
+with t1 as(
+      Select lower(Substring_Index(primary_poc, " ", 1)) as First_name,
+            lower(Substring_index(primary_poc, " ", -1)) as last_name,
+            (locate(" ", primary_poc) -1) as First_name_length,
+            Length(primary_poc) - locate(" ", primary_poc) as Last_name_length,
+            lower(Replace(name, " ", "")) as Company
+      From accounts
+)
+Select Concat(
+            Left(First_name, 1),
+            Right(First_name, 1),
+            Left(last_name, 1),
+            right(last_name, 1),
+            First_name_length,
+            Last_name_length,
+            Company
+      )
+from t1
+
+-- Find the running totol of all standard_qty in the orders table
+Select standard_qty,
+      Sum(standard_qty) Over (
+            Order by occurred_at
+      ) as Running_total
+From orders
+
+
+-- Find the moving avg of all standard_qty in the orders table
+Select standard_qty,
+      Avg(standard_qty) Over(
+            Order by occurred_at
+      ) as Moving_Avg
+From orders
+
+-- Find running totol of all standard_qty partitioned by year in the orders table
+Select standard_qty,
+      Year(occurred_at) as Years,
+      Sum(standard_qty) Over (
+            Partition by year(occurred_at)
+            Order by occurred_at
+      ) as Running_Total_Year
+From orders
+
+--Find totol of all standard_qty partitioned by year in the orders table
+Select standard_qty,
+      Year(occurred_at) as Years,
+      Sum(standard_qty) Over (
+            Partition by year(occurred_at)           
+      ) as Total_year
+From orders
+
+
+-- Select the id, account_id, and total variable from the orders table, then create a column called total_rank that ranks this 
+-- total amount of paper ordered (from highest to lowest) for each account using a partition
+Select id,
+      account_id,
+      total,
+      Rank() Over (
+            Partition by account_id
+            Order by total DESC
+      ) as Total_Rank
+From orders
+
+-- Multiple Aggregation functions with Partition by Account_id and Order by month.
+SELECT id,
+       account_id,
+       Month(occurred_at) AS Month,
+       DENSE_RANK() OVER account_year_window AS D_Rank,       
+       SUM(total_amt_usd) OVER account_year_window AS sum_total_amt_usd,
+       COUNT(total_amt_usd) OVER account_year_window AS count_total_amt_usd,
+       AVG(total_amt_usd) OVER account_year_window AS avg_total_amt_usd,
+       MIN(total_amt_usd) OVER account_year_window AS min_total_amt_usd,
+       MAX(total_amt_usd) OVER account_year_window AS max_total_amt_usd
+FROM orders 
+WINDOW account_year_window AS (PARTITION BY account_id ORDER BY  MONTH(occurred_at)) -- Window Alias
+
+-- Lead and Lag Use Case
+SELECT account_id,
+       standard_sum,
+       LAG(standard_sum) OVER (ORDER BY standard_sum) AS lag_,
+       LEAD(standard_sum) OVER (ORDER BY standard_sum) AS lead_,
+       standard_sum - LAG(standard_sum) OVER (ORDER BY standard_sum) AS lag_difference,
+       LEAD(standard_sum) OVER (ORDER BY standard_sum) - standard_sum AS lead_difference
+FROM (
+SELECT account_id,
+       SUM(standard_qty) AS standard_sum
+  FROM orders 
+ GROUP BY 1
+ ) as sub
+
+-- use occurred_at and total_amt_usd in the orders table along with LEAD to do so. In your query 
+-- results, there should be four columns: occurred_at, total_amt_usd, lead, and lead_difference.
+Select Date_,
+      total_sum_usd,
+      Lead(total_sum_usd) Over (
+            Order by Date_
+      ) as Lead_,
+      Lead(total_sum_usd) Over (
+            Order by Date_
+      ) - total_sum_usd as Lead_Diff
+From (
+            Select Sum(total_amt_usd) as total_sum_usd,
+                  Date(occurred_at) as Date_
+            From orders
+            GROUP BY occurred_at
+      ) as t1
+
+-- Use the NTILE functionality to divide the accounts into 4 levels in terms of the amount of 
+--standard_qty for their orders. Your resulting table should have the account_id, the occurred_at 
+--time for each order, the total amount of standard_qty paper purchased, and one of four levels in a 
+--standard_quartile column.
+Select account_id,
+      (standard_qty) as Sum_standard,
+      Date(occurred_at) as Date_,
+      Ntile(4) Over (
+            Partition by account_id
+            Order by (standard_qty) DESC
+      ) as Quartile
+From orders
+Order by account_id DESC
+
+-- write a query that left joins the accounts table and the sales_reps tables on each sale rep's ID 
+-- number and joins it using the < comparison operator on accounts.primary_poc and sales_reps.name,
+
+SELECT accounts.name as account_name,
+       accounts.primary_poc as poc_name,
+       sales_reps.name as sales_rep_name
+  FROM accounts
+  LEFT JOIN sales_reps
+    ON accounts.sales_rep_id = sales_reps.id
+   AND accounts.primary_poc < sales_reps.name -- produces all accounts wher primary_poc names comes 
+-- alphabetically before the sales_rep name
